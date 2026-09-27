@@ -1,6 +1,6 @@
 # sunshine-virtual-display
 
-Stream games from a Linux PC to a TV with [Sunshine](https://github.com/LizardByte/Sunshine) + [Moonlight](https://moonlight-stream.org/) at **native 4K60**, without a dummy HDMI plug and **with your real monitors turned off** while you play.
+Stream games from a Linux PC to a TV with [Sunshine](https://github.com/LizardByte/Sunshine) + [Moonlight](https://moonlight-stream.org/) at the **client's native resolution** (up to 4K60, or 1440p/1080p at 120 Hz), without a dummy HDMI plug and **with your real monitors turned off** while you play.
 
 > **Developed and tested on [CachyOS](https://cachyos.org/)** (Arch-based) with KDE Plasma 6 on Wayland and an AMD GPU. Other distributions and GPUs have not been tested.
 
@@ -8,11 +8,26 @@ Stream games from a Linux PC to a TV with [Sunshine](https://github.com/LizardBy
 
 When a Moonlight session starts:
 
-1. A virtual 3840×2160@60 display (a free HDMI connector with a fake EDID) is turned on.
+1. A virtual display (a free HDMI connector with a fake EDID) is turned on at the resolution and refresh rate the Moonlight client asked for.
 2. Your real monitors are turned off, and Sunshine captures only the virtual display.
 3. The session is unlocked.
 
 When the session ends, the monitors that were on come back, the virtual display is turned off, and the session is locked again.
+
+## Supported modes
+
+The virtual display follows what the Moonlight client asks for (`SUNSHINE_CLIENT_WIDTH/HEIGHT/FPS`), so a 4K TV, a 1440p monitor and a Steam Deck each get their native resolution. The EDID offers these modes, all within HDMI 2.0:
+
+| Resolution | Refresh rates |
+|---|---|
+| 3840×2160 | 60, 30 |
+| 2560×1440 | 120, 60 |
+| 1920×1200 | 60 |
+| 1920×1080 | 120, 60 |
+| 1280×800 (Steam Deck) | 60 |
+| 1280×720 | 60 |
+
+If the client asks for anything else (e.g. an ultrawide 3440×1440), `VIRTUAL_MODE` is used and Moonlight scales the picture. 4K at 120 Hz is not included because it needs HDMI 2.1.
 
 ## Tested on
 
@@ -77,7 +92,9 @@ Sunshine only runs inside a logged-in graphical session. To wake the PC from Moo
 | Variable | Default | Meaning |
 |---|---|---|
 | `VIRTUAL` | `HDMI-A-1` | Connector of the virtual display (must match the kernel parameters) |
-| `VIRTUAL_MODE` / `VIRTUAL_SCALE` | `3840x2160@60` / `2` | Mode and scale of the virtual display |
+| `MATCH_CLIENT` | `1` | Use the resolution and fps requested by the Moonlight client |
+| `VIRTUAL_MODE` | `3840x2160@60` | Fallback mode when the client's resolution is not in the EDID |
+| `VIRTUAL_SCALE` | `auto` | `auto` (200% at 4K, 150% at 1440p, 100% below) or a fixed value |
 | `PRIMARY` / `PRIMARY_MODE` | empty | Your main monitor and its mode, restored with an explicit mode and position |
 | `UNLOCK_ON_STREAM` | `1` | Unlock the session when a stream starts |
 | `LOCK_ON_STREAM_END` | `1` | Lock it when the stream ends |
@@ -87,7 +104,7 @@ Sunshine only runs inside a logged-in graphical session. To wake the PC from Moo
 
 | Piece | What it does |
 |---|---|
-| `edid/gen_edid.py` | Generates a 4K60 HDMI EDID that passes `edid-decode --check`. It includes the HDMI Forum VSDB (600 MHz), which amdgpu needs to accept 594 MHz over HDMI. |
+| `edid/gen_edid.py` | Generates an HDMI EDID (4K60 preferred, plus 1440p/1080p up to 120 Hz and 16:10 modes) that passes `edid-decode --check`. It includes the HDMI Forum VSDB (600 MHz), which amdgpu needs to accept 594 MHz over HDMI. |
 | `drm.edid_firmware=… video=HDMI-A-1:e` | Kernel parameters that load the EDID and force the connector on at boot. The initramfs must contain the EDID. |
 | `scripts/stream-start.sh` | Sunshine `do` command: saves which monitors are on, enables the virtual display, disables the monitors, unlocks. If the virtual display cannot be enabled, it leaves the monitors alone and exits with an error, so Sunshine aborts the stream. |
 | `scripts/stream-stop.sh` | Sunshine `undo` command: restores the saved monitors (or any connected one), disables the virtual display, locks. |

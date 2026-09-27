@@ -6,8 +6,9 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine-virtual-display/config"
 [ -f "$CONFIG" ] && . "$CONFIG"
 
 VIRTUAL="${VIRTUAL:-HDMI-A-1}"                 # connector forced on with the fake EDID
-VIRTUAL_MODE="${VIRTUAL_MODE:-3840x2160@60}"
-VIRTUAL_SCALE="${VIRTUAL_SCALE:-2}"
+VIRTUAL_MODE="${VIRTUAL_MODE:-3840x2160@60}"  # fallback when the client's resolution is not available
+VIRTUAL_SCALE="${VIRTUAL_SCALE:-auto}"         # auto: 2 for 4K, 1.5 for 1440p, 1 below
+MATCH_CLIENT="${MATCH_CLIENT:-1}"              # use the resolution/fps requested by the Moonlight client
 PRIMARY="${PRIMARY:-}"                         # preferred real monitor, e.g. DP-2 (optional)
 PRIMARY_MODE="${PRIMARY_MODE:-}"               # its mode, e.g. 2560x1440@144 (optional)
 UNLOCK_ON_STREAM="${UNLOCK_ON_STREAM:-1}"      # unlock the session when a stream starts
@@ -38,6 +39,49 @@ is_enabled() {
 import json, sys
 sys.exit(0 if any(o["name"] == sys.argv[1] and o["enabled"] for o in json.load(sys.stdin)["outputs"]) else 1)
 ' "$1"
+}
+
+# Mode id of the virtual display for WIDTH HEIGHT FPS: exact resolution, closest refresh rate.
+# Prints nothing if the virtual display has no mode with that resolution.
+virtual_mode_id() {
+    kscreen-doctor -j | python3 -c '
+import json, sys
+virtual, w, h, fps = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4])
+if fps > 1000:  # some clients report millihertz
+    fps /= 1000
+outs = [o for o in json.load(sys.stdin)["outputs"] if o["name"] == virtual]
+modes = [m for o in outs for m in o["modes"] if m["size"]["width"] == w and m["size"]["height"] == h]
+if modes:
+    print(min(modes, key=lambda m: abs(m["refreshRate"] - fps))["id"])
+' "$VIRTUAL" "$1" "$2" "$3" 2>/dev/null
+}
+
+# Pick the virtual display mode: the client's request (Sunshine exports SUNSHINE_CLIENT_WIDTH,
+# SUNSHINE_CLIENT_HEIGHT and SUNSHINE_CLIENT_FPS to prep commands), else VIRTUAL_MODE.
+# Prints "<mode id> <height>".
+choose_virtual_mode() {
+    if [ "$MATCH_CLIENT" = 1 ] && [ -n "$SUNSHINE_CLIENT_WIDTH" ] && [ -n "$SUNSHINE_CLIENT_HEIGHT" ]; then
+        id=$(virtual_mode_id "$SUNSHINE_CLIENT_WIDTH" "$SUNSHINE_CLIENT_HEIGHT" "${SUNSHINE_CLIENT_FPS:-60}")
+        if [ -n "$id" ]; then
+            echo "$id $SUNSHINE_CLIENT_HEIGHT"
+            return
+        fi
+        log "no ${SUNSHINE_CLIENT_WIDTH}x${SUNSHINE_CLIENT_HEIGHT} mode on $VIRTUAL, using $VIRTUAL_MODE (Moonlight will scale)"
+    fi
+    size=${VIRTUAL_MODE%@*}
+    rate=${VIRTUAL_MODE#*@}
+    [ "$rate" != "$VIRTUAL_MODE" ] || rate=60
+    id=$(virtual_mode_id "${size%x*}" "${size#*x}" "$rate")
+    [ -n "$id" ] && echo "$id ${size#*x}"
+}
+
+# Scale for a given height when VIRTUAL_SCALE=auto, so the desktop stays readable from the couch
+scale_for_height() {
+    if [ "$VIRTUAL_SCALE" != auto ]; then echo "$VIRTUAL_SCALE"
+    elif [ "$1" -ge 2160 ]; then echo 2
+    elif [ "$1" -ge 1440 ]; then echo 1.5
+    else echo 1
+    fi
 }
 
 # The user's graphical session. Sunshine runs these scripts from a systemd user service, which is not

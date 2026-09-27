@@ -1,6 +1,6 @@
 # sunshine-virtual-display
 
-Juega en la tele desde tu PC con Linux usando [Sunshine](https://github.com/LizardByte/Sunshine) + [Moonlight](https://moonlight-stream.org/) en **4K60 nativo**, sin enchufes HDMI falsos y **con tus monitores apagados** mientras juegas.
+Juega en la tele desde tu PC con Linux usando [Sunshine](https://github.com/LizardByte/Sunshine) + [Moonlight](https://moonlight-stream.org/) a la **resolución nativa del cliente** (hasta 4K60, o 1440p/1080p a 120 Hz), sin enchufes HDMI falsos y **con tus monitores apagados** mientras juegas.
 
 > **Desarrollado y probado en [CachyOS](https://cachyos.org/)** (basado en Arch) con KDE Plasma 6 en Wayland y una gráfica AMD. No se ha probado en otras distribuciones ni con otras gráficas.
 
@@ -8,11 +8,26 @@ Juega en la tele desde tu PC con Linux usando [Sunshine](https://github.com/Liza
 
 Al empezar una sesión de Moonlight:
 
-1. Se enciende una pantalla virtual de 3840×2160 a 60 Hz: un conector HDMI libre con un EDID falso.
+1. Se enciende una pantalla virtual (un conector HDMI libre con un EDID falso) a la resolución y frecuencia que ha pedido el cliente de Moonlight.
 2. Se apagan tus monitores y Sunshine captura solo la pantalla virtual.
 3. Se desbloquea la sesión.
 
 Al terminar vuelven los monitores que tenías encendidos, se apaga la pantalla virtual y la sesión se bloquea de nuevo.
+
+## Modos disponibles
+
+La pantalla virtual sigue lo que pide el cliente de Moonlight (`SUNSHINE_CLIENT_WIDTH/HEIGHT/FPS`), así que una tele 4K, un monitor 1440p y una Steam Deck reciben cada uno su resolución nativa. El EDID ofrece estos modos, todos dentro de HDMI 2.0:
+
+| Resolución | Frecuencias |
+|---|---|
+| 3840×2160 | 60, 30 |
+| 2560×1440 | 120, 60 |
+| 1920×1200 | 60 |
+| 1920×1080 | 120, 60 |
+| 1280×800 (Steam Deck) | 60 |
+| 1280×720 | 60 |
+
+Si el cliente pide otra cosa (por ejemplo, un ultrapanorámico de 3440×1440), se usa `VIRTUAL_MODE` y Moonlight reescala la imagen. El 4K a 120 Hz no está incluido porque necesita HDMI 2.1.
 
 ## Probado en
 
@@ -77,7 +92,9 @@ Sunshine solo funciona dentro de una sesión gráfica iniciada. Para encender el
 | Variable | Por defecto | Qué hace |
 |---|---|---|
 | `VIRTUAL` | `HDMI-A-1` | Conector de la pantalla virtual (tiene que coincidir con los parámetros del kernel) |
-| `VIRTUAL_MODE` / `VIRTUAL_SCALE` | `3840x2160@60` / `2` | Resolución y escala de la pantalla virtual |
+| `MATCH_CLIENT` | `1` | Usar la resolución y los fps que pide el cliente de Moonlight |
+| `VIRTUAL_MODE` | `3840x2160@60` | Modo de respaldo cuando la resolución del cliente no está en el EDID |
+| `VIRTUAL_SCALE` | `auto` | `auto` (200 % en 4K, 150 % en 1440p, 100 % por debajo) o un valor fijo |
 | `PRIMARY` / `PRIMARY_MODE` | vacío | Tu monitor principal y su resolución, que se restauran indicando resolución y posición |
 | `UNLOCK_ON_STREAM` | `1` | Desbloquear la sesión al empezar a jugar |
 | `LOCK_ON_STREAM_END` | `1` | Bloquearla al terminar |
@@ -87,7 +104,7 @@ Sunshine solo funciona dentro de una sesión gráfica iniciada. Para encender el
 
 | Pieza | Qué hace |
 |---|---|
-| `edid/gen_edid.py` | Genera un EDID HDMI 4K60 que pasa `edid-decode --check`. Incluye el bloque HDMI Forum (600 MHz), sin el cual amdgpu no acepta 594 MHz por HDMI. |
+| `edid/gen_edid.py` | Genera un EDID HDMI (4K60 como modo preferido, más 1440p/1080p hasta 120 Hz y modos 16:10) que pasa `edid-decode --check`. Incluye el bloque HDMI Forum (600 MHz), sin el cual amdgpu no acepta 594 MHz por HDMI. |
 | `drm.edid_firmware=… video=HDMI-A-1:e` | Parámetros del kernel que cargan el EDID y fuerzan el conector como conectado al arrancar. El EDID tiene que estar dentro del initramfs. |
 | `scripts/stream-start.sh` | Comando `do` de Sunshine: apunta qué monitores estaban encendidos, enciende la virtual, apaga los monitores y desbloquea. Si la virtual no se puede encender, no toca los monitores y termina con error, así que Sunshine cancela la sesión. |
 | `scripts/stream-stop.sh` | Comando `undo` de Sunshine: vuelve a encender los monitores guardados (o cualquiera conectado), apaga la virtual y bloquea. |

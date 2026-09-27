@@ -2,9 +2,12 @@
 
 # Connector used for the virtual display (must match the kernel parameters)
 VIRTUAL=HDMI-A-1
+# The virtual display follows the resolution and fps requested by the Moonlight client when the EDID
+# has that mode (MATCH_CLIENT=1). VIRTUAL_MODE is only used when it does not.
+MATCH_CLIENT=1
 VIRTUAL_MODE=3840x2160@60
-# 2 = 200% scaling, so the desktop is readable on a TV from the couch
-VIRTUAL_SCALE=2
+# auto = 200% at 4K, 150% at 1440p, 100% below, so the desktop stays readable from the couch
+VIRTUAL_SCALE=auto
 
 # Your main real monitor and its mode (optional but recommended). See `kscreen-doctor -o`.
 PRIMARY=DP-2

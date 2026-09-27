@@ -7,8 +7,15 @@ mkdir -p "$(dirname "$STATE")"
 # If the previous stream did not end cleanly the monitors may already be off: keep the saved list then
 [ -n "$active" ] && echo "$active" > "$STATE"
 
-kscreen-doctor "output.$VIRTUAL.enable" "output.$VIRTUAL.mode.$VIRTUAL_MODE" "output.$VIRTUAL.scale.$VIRTUAL_SCALE" "output.$VIRTUAL.position.0,0"
+kscreen-doctor "output.$VIRTUAL.enable" "output.$VIRTUAL.position.0,0"
 sleep 1
+mode=$(choose_virtual_mode)
+if [ -n "$mode" ]; then
+    kscreen-doctor "output.$VIRTUAL.mode.${mode%% *}" "output.$VIRTUAL.scale.$(scale_for_height "${mode#* }")"
+    sleep 1
+else
+    log "no usable mode found on $VIRTUAL; keeping its current mode"
+fi
 if ! is_enabled "$VIRTUAL"; then
     # Never turn the real monitors off without a screen to stream; a non-zero exit makes Sunshine abort
     log "could not enable $VIRTUAL (is the EDID installed? see install/install-edid.sh)"
