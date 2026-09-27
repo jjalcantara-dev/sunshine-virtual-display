@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Sunshine virtual display: login
+Comment=Turn the virtual display off at login and lock the session
+Exec=@DEST@/on-login.sh
+X-KDE-autostart-phase=2
+NoDisplay=true

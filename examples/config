@@ -1,0 +1,14 @@
+# sunshine-virtual-display settings (sourced by the scripts as shell variables)
+
+# Connector used for the virtual display (must match the kernel parameters)
+VIRTUAL=HDMI-A-1
+VIRTUAL_MODE=3840x2160@60
+# 2 = 200% scaling, so the desktop is readable on a TV from the couch
+VIRTUAL_SCALE=2
+
+# Your main real monitor and its mode (optional but recommended). See `kscreen-doctor -o`.
+PRIMARY=DP-2
+PRIMARY_MODE=2560x1440@144
+
+# Lock the session right after login (useful with auto-login). Sunshine unlocks it when you stream.
+LOCK_ON_LOGIN=1
