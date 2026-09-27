@@ -35,12 +35,15 @@ fi
 
 if [ -f /etc/sdboot-manage.conf ] && command -v sdboot-manage >/dev/null; then
     [ -e /etc/sdboot-manage.conf.bak-sunshine ] || cp /etc/sdboot-manage.conf /etc/sdboot-manage.conf.bak-sunshine
-    if ! grep -q "drm.edid_firmware=$CONN" /etc/sdboot-manage.conf; then
+    if grep -q "drm.edid_firmware=$CONN" /etc/sdboot-manage.conf; then
+        msg="Kernel parameters already present in /etc/sdboot-manage.conf."
+    else
         sed -i "s|^LINUX_OPTIONS=\"\(.*\)\"|LINUX_OPTIONS=\"\1 $PARAMS\"|" /etc/sdboot-manage.conf
+        msg="Kernel parameters added via sdboot-manage (backup: /etc/sdboot-manage.conf.bak-sunshine)."
     fi
     if grep -q "drm.edid_firmware=$CONN" /etc/sdboot-manage.conf; then
         sdboot-manage gen
-        echo "Kernel parameters added via sdboot-manage (backup: /etc/sdboot-manage.conf.bak-sunshine)."
+        echo "$msg"
     else
         echo "Could not find a LINUX_OPTIONS=\"...\" line in /etc/sdboot-manage.conf. Add these parameters manually:" >&2
         echo "    $PARAMS" >&2
