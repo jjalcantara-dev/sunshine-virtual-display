@@ -6,6 +6,10 @@ DEST="${XDG_DATA_HOME:-$HOME/.local/share}/sunshine-virtual-display"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine-virtual-display"
 AUTOSTART="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 
+for cmd in kscreen-doctor loginctl python3; do
+    command -v "$cmd" >/dev/null || { echo "Missing dependency: $cmd (this project needs KDE Plasma 6 on Wayland)" >&2; exit 1; }
+done
+
 mkdir -p "$DEST" "$CONF_DIR" "$AUTOSTART"
 install -m755 "$REPO"/scripts/*.sh "$DEST/"
 [ -f "$CONF_DIR/config" ] || install -m644 "$REPO/examples/config" "$CONF_DIR/config"

@@ -10,17 +10,44 @@ VIRTUAL_MODE="${VIRTUAL_MODE:-3840x2160@60}"
 VIRTUAL_SCALE="${VIRTUAL_SCALE:-2}"
 PRIMARY="${PRIMARY:-}"                         # preferred real monitor, e.g. DP-2 (optional)
 PRIMARY_MODE="${PRIMARY_MODE:-}"               # its mode, e.g. 2560x1440@144 (optional)
+UNLOCK_ON_STREAM="${UNLOCK_ON_STREAM:-1}"      # unlock the session when a stream starts
+LOCK_ON_STREAM_END="${LOCK_ON_STREAM_END:-1}"  # lock it again when the stream ends
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/sunshine-virtual-display/active-outputs"
 
-# Real monitors KDE currently reports as connected
-connected_real() {
-    kscreen-doctor -j | python3 -c 'import json,sys; print(" ".join(o["name"] for o in json.load(sys.stdin)["outputs"] if o.get("connected") and o["name"] != sys.argv[1]))' "$VIRTUAL"
+log() { echo "sunshine-virtual-display: $*" >&2; }
+
+# Space-separated names of outputs matching a condition on KDE's JSON ("connected" or "enabled"),
+# excluding the virtual display
+outputs_where() {
+    kscreen-doctor -j | python3 -c '
+import json, sys
+field, virtual = sys.argv[1], sys.argv[2]
+print(" ".join(o["name"] for o in json.load(sys.stdin)["outputs"] if o.get(field) and o["name"] != virtual))
+' "$1" "$VIRTUAL"
 }
 
+# Real monitors KDE currently reports as connected
+connected_real() { outputs_where connected; }
+
 # Real monitors currently enabled in KDE
-enabled_real() {
-    kscreen-doctor -j | python3 -c 'import json,sys; print(" ".join(o["name"] for o in json.load(sys.stdin)["outputs"] if o["enabled"] and o["name"] != sys.argv[1]))' "$VIRTUAL"
+enabled_real() { outputs_where enabled; }
+
+# Whether a given output is currently enabled
+is_enabled() {
+    kscreen-doctor -j | python3 -c '
+import json, sys
+sys.exit(0 if any(o["name"] == sys.argv[1] and o["enabled"] for o in json.load(sys.stdin)["outputs"]) else 1)
+' "$1"
 }
+
+# The user's graphical session. Sunshine runs these scripts from a systemd user service, which is not
+# inside the session, so the session is looked up explicitly instead of relying on XDG_SESSION_ID.
+graphical_session() {
+    loginctl show-user "$(id -un)" -p Display --value 2>/dev/null
+}
+
+session_unlock() { loginctl unlock-session $(graphical_session); }
+session_lock()   { loginctl lock-session $(graphical_session); }
 
 # Turn real monitors back on and the virtual display off.
 # Tries the given outputs, the preferred monitor and every connected monitor: a monitor in standby
@@ -31,21 +58,27 @@ restore_real() {
     for o in $1 $PRIMARY $(connected_real); do
         case " $candidates " in *" $o "*) ;; *) candidates="$candidates $o" ;; esac
     done
-    # KDE silently rejects enabling a monitor that would overlap the virtual display, so move it away first
+    # In our tests KDE silently rejected enabling a monitor that would overlap the virtual display,
+    # so move the virtual display out of the way first
     kscreen-doctor "output.$VIRTUAL.position.20000,0"
     for o in $candidates; do
         if [ "$o" = "$PRIMARY" ] && [ -n "$PRIMARY_MODE" ]; then
             kscreen-doctor "output.$o.enable" "output.$o.mode.$PRIMARY_MODE" "output.$o.position.0,0"
+            # A mode that does not exist makes kscreen-doctor ignore the whole command: retry without it
+            is_enabled "$o" || kscreen-doctor "output.$o.enable" "output.$o.position.0,0"
         else
             kscreen-doctor "output.$o.enable"
         fi
     done
     sleep 2
     active=$(enabled_real)
-    [ -n "$active" ] || return 0
+    if [ -z "$active" ]; then
+        log "no real monitor could be enabled; keeping the virtual display on"
+        return 0
+    fi
     main=""
     for o in $active; do [ "$o" = "$PRIMARY" ] && main=$o; done
-    [ -n "$main" ] || main=$(echo $active | cut -d' ' -f1)
+    [ -n "$main" ] || main=${active%% *}
     kscreen-doctor "output.$main.priority.1"
     kscreen-doctor "output.$VIRTUAL.disable"
 }

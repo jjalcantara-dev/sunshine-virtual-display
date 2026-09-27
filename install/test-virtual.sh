@@ -6,8 +6,10 @@ CONN="${1:?usage: $0 <connector, e.g. HDMI-A-1>}"
 EDID="$(dirname "$(readlink -f "$0")")/../edid/sunshine-4k60.bin"
 [ "$(id -u)" = 0 ] || { echo "Run as root" >&2; exit 1; }
 
-sysfs=$(ls -d /sys/class/drm/card*-"$CONN" 2>/dev/null | head -1)
-[ -n "$sysfs" ] || { echo "Connector $CONN not found in /sys/class/drm" >&2; exit 1; }
+matches=$(ls -d /sys/class/drm/card*-"$CONN" 2>/dev/null | wc -l)
+[ "$matches" -ge 1 ] || { echo "Connector $CONN not found in /sys/class/drm" >&2; exit 1; }
+[ "$matches" -eq 1 ] || { echo "$CONN exists on more than one GPU; pick a connector name that is unique" >&2; exit 1; }
+sysfs=$(ls -d /sys/class/drm/card*-"$CONN")
 [ "$(cat "$sysfs/status")" = disconnected ] || { echo "$CONN is not free (status: $(cat "$sysfs/status"))" >&2; exit 1; }
 card=$(basename "$sysfs" | cut -d- -f1)
 pci=$(basename "$(readlink -f "/sys/class/drm/$card/device")")

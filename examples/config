@@ -10,5 +10,8 @@ VIRTUAL_SCALE=2
 PRIMARY=DP-2
 PRIMARY_MODE=2560x1440@144
 
-# Lock the session right after login (useful with auto-login). Sunshine unlocks it when you stream.
+# Session locking. With UNLOCK_ON_STREAM=1, any paired Moonlight client gets an unlocked desktop.
+UNLOCK_ON_STREAM=1
+LOCK_ON_STREAM_END=1
+# Lock the session right after login (useful with auto-login)
 LOCK_ON_LOGIN=1

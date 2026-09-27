@@ -2,6 +2,8 @@
 
 Juega en la tele desde tu PC con Linux usando [Sunshine](https://github.com/LizardByte/Sunshine) + [Moonlight](https://moonlight-stream.org/) en **4K60 nativo**, sin enchufes HDMI falsos y **con tus monitores apagados** mientras juegas.
 
+> **Desarrollado y probado en [CachyOS](https://cachyos.org/)** (basado en Arch) con KDE Plasma 6 en Wayland y una gráfica AMD. No se ha probado en otras distribuciones ni con otras gráficas.
+
 *[Read in English](README.md)*
 
 Al empezar una sesión de Moonlight:
@@ -14,17 +16,19 @@ Al terminar vuelven los monitores que tenías encendidos, se apaga la pantalla v
 
 ## Probado en
 
-- CachyOS (Arch), KDE Plasma 6 en Wayland, Plasma Login Manager
+Todo el proyecto se ha desarrollado y probado en este equipo:
+
+- CachyOS (Arch), kernel 7.2 (linux-cachyos), KDE Plasma 6 en Wayland, Plasma Login Manager
 - AMD Radeon RX 9070 XT (amdgpu, codificación Vulkan: H.264 / HEVC / AV1)
 - systemd-boot gestionado con `sdboot-manage`, `mkinitcpio`
 - Sunshine 2026.922, Moonlight TV 1.6 en una tele LG con webOS
 
-Debería funcionar en otros equipos con KDE Wayland y amdgpu. En otros escritorios habría que sustituir `kscreen-doctor`. **Úsalo bajo tu responsabilidad:** cambia los parámetros del kernel y el initramfs.
+Probablemente funcione en otras distribuciones basadas en Arch con KDE Wayland y amdgpu. Con otros drivers de gráfica (NVIDIA, Intel), otros gestores de arranque y otros escritorios no está probado, y fuera de KDE habría que sustituir `kscreen-doctor`. **Úsalo bajo tu responsabilidad:** cambia los parámetros del kernel y el initramfs.
 
 ## Requisitos
 
 - KDE Plasma 6 (Wayland): `kscreen-doctor`, `loginctl`, `python3`
-- Un conector **libre** en la gráfica para la pantalla virtual, por ejemplo `HDMI-A-1`. Una vez configurado, cualquier monitor que conectes a ese puerto se tratará como la pantalla virtual, así que déjalo libre.
+- Un conector **libre** en la gráfica para la pantalla virtual, por ejemplo `HDMI-A-1`, con un nombre que no se repita en otra gráfica. Una vez configurado, cualquier monitor que conectes a ese puerto se tratará como la pantalla virtual, así que déjalo libre.
 - Sunshine funcionando ya (`systemctl --user status app-dev.lizardbyte.app.Sunshine`)
 
 ## Instalación
@@ -60,13 +64,32 @@ Sunshine solo funciona dentro de una sesión gráfica iniciada. Para encender el
 - Deja `LOCK_ON_LOGIN=1`. La entrada de autoarranque bloquea la sesión nada más entrar. Quien esté delante del PC ve la pantalla de bloqueo, y Sunshine la desbloquea al empezar a jugar.
 - Activa Wake-on-LAN en la BIOS y en la tarjeta de red (`nmcli connection modify <conexión> 802-3-ethernet.wake-on-lan magic`).
 
+## Seguridad
+
+- Con `UNLOCK_ON_STREAM=1` (lo que viene por defecto), **cualquier cliente de Moonlight emparejado recibe tu escritorio desbloqueado**. Empareja solo tus dispositivos y borra los antiguos desde el panel web de Sunshine (*PIN* / *Clients*).
+- Con el inicio de sesión automático, quien encienda el PC tiene tu sesión abierta unos segundos, hasta que `on-login.sh` la bloquea. Además, el monedero de KDE (KWallet) no se abre al entrar, así que las apps que lo usan te pedirán su contraseña.
+- Pon `UNLOCK_ON_STREAM=0` si prefieres escribir la contraseña en la tele.
+
+## Configuración
+
+`~/.config/sunshine-virtual-display/config` (mira [examples/config](examples/config)):
+
+| Variable | Por defecto | Qué hace |
+|---|---|---|
+| `VIRTUAL` | `HDMI-A-1` | Conector de la pantalla virtual (tiene que coincidir con los parámetros del kernel) |
+| `VIRTUAL_MODE` / `VIRTUAL_SCALE` | `3840x2160@60` / `2` | Resolución y escala de la pantalla virtual |
+| `PRIMARY` / `PRIMARY_MODE` | vacío | Tu monitor principal y su resolución, que se restauran indicando resolución y posición |
+| `UNLOCK_ON_STREAM` | `1` | Desbloquear la sesión al empezar a jugar |
+| `LOCK_ON_STREAM_END` | `1` | Bloquearla al terminar |
+| `LOCK_ON_LOGIN` | `1` | Bloquearla nada más iniciar sesión |
+
 ## Cómo funciona
 
 | Pieza | Qué hace |
 |---|---|
 | `edid/gen_edid.py` | Genera un EDID HDMI 4K60 que pasa `edid-decode --check`. Incluye el bloque HDMI Forum (600 MHz), sin el cual amdgpu no acepta 594 MHz por HDMI. |
 | `drm.edid_firmware=… video=HDMI-A-1:e` | Parámetros del kernel que cargan el EDID y fuerzan el conector como conectado al arrancar. El EDID tiene que estar dentro del initramfs. |
-| `scripts/stream-start.sh` | Comando `do` de Sunshine: apunta qué monitores estaban encendidos, enciende la virtual, apaga los monitores y desbloquea. |
+| `scripts/stream-start.sh` | Comando `do` de Sunshine: apunta qué monitores estaban encendidos, enciende la virtual, apaga los monitores y desbloquea. Si la virtual no se puede encender, no toca los monitores y termina con error, así que Sunshine cancela la sesión. |
 | `scripts/stream-stop.sh` | Comando `undo` de Sunshine: vuelve a encender los monitores guardados (o cualquiera conectado), apaga la virtual y bloquea. |
 | `scripts/on-login.sh` | Autoarranque: apaga la virtual, enciende todos los monitores conectados y bloquea. |
 
@@ -76,7 +99,8 @@ Sunshine solo funciona dentro de una sesión gráfica iniciada. Para encender el
 - **Monitor apagado → falla la captura** ("Failed to initialize video capture/encoding. Is a display connected and turned on?"). La captura KMS necesita una salida activa, y por eso existe la pantalla virtual.
 - **KDE recuerda una configuración por cada combinación de monitores conectados.** Si una sesión termina mal, KDE puede guardar "monitor apagado, virtual encendida" para esa combinación, y al enchufar o desenchufar un segundo monitor se apaga el principal. `on-login.sh` y `restore_real` lo corrigen siempre.
 - **Un monitor en reposo deja de anunciarse como conectado.** Si solo se restauran los monitores "conectados", ese se queda fuera, así que los scripts también prueban con los guardados y con el principal.
-- **KDE rechaza en silencio encender un monitor que se solapa con otra salida.** Primero se aparta la virtual y luego se enciende el monitor principal con su resolución y posición.
+- **Sunshine ejecuta los comandos desde un servicio de usuario de systemd, fuera de la sesión.** Un `loginctl unlock-session` sin más solo funciona si `XDG_SESSION_ID` está exportada ahí por casualidad, así que los scripts buscan la sesión gráfica con `loginctl show-user <usuario> -p Display`.
+- **En nuestras pruebas, KDE rechazaba en silencio encender un monitor que se solapaba con otra salida.** Primero se aparta la virtual y luego se enciende el monitor principal con su resolución y posición.
 - **Forzar el conector desde debugfs no avisa a KWin.** `udevadm trigger --subsystem-match=drm --action=change` sí lo hace.
 - **Una combinación de monitores nueva al arrancar** (por ejemplo, un segundo monitor que casi nunca enciendes) hace que KDE active todas las salidas, virtual incluida, y el cuadro de contraseña puede acabar en una pantalla que no ves. `on-login.sh` lo resuelve.
 

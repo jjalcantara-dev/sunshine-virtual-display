@@ -7,6 +7,6 @@ sleep 3
 restore_real "$(connected_real)"
 if [ "${LOCK_ON_LOGIN:-1}" = 1 ]; then
     sleep 2
-    loginctl lock-session
+    session_lock
 fi
 exit 0
