@@ -69,20 +69,34 @@ $EDITOR ~/.config/sunshine-virtual-display/config
 
 Add the two lines printed by `install-user.sh` to `~/.config/sunshine/sunshine.conf` (see [examples/sunshine.conf](examples/sunshine.conf)), restart Sunshine and reboot.
 
+For the watchdog and the emergency shortcut (see below), store your Sunshine web UI credentials so the scripts can end a session through Sunshine's API:
+
+```sh
+umask 077
+printf 'SUNSHINE_USER=%s\nSUNSHINE_PASSWORD=%s\n' 'your-user' 'your-password' > ~/.config/sunshine-virtual-display/credentials
+```
+
 To undo the kernel part: `sudo install/uninstall-edid.sh HDMI-A-1`. `install-edid.sh` also keeps a backup of `/etc/sdboot-manage.conf` in `/etc/sdboot-manage.conf.bak-sunshine`.
 
-### Auto-login (to wake the PC from the couch)
+### Getting your monitors back
 
-Sunshine only runs inside a logged-in graphical session. To wake the PC from Moonlight (Wake-on-LAN) and play without walking to it:
+Sunshine only runs the `undo` command (which brings your monitors back) when the app is **closed**. If the TV freezes, is turned off, or you leave without quitting, your monitors would stay off. Three things take care of that:
 
-- Enable auto-login: *System Settings → Login Screen*.
-- Keep `LOCK_ON_LOGIN=1`. The autostart entry locks the session right after login. The lock screen stays up for anyone at the desk, and Sunshine unlocks it when you stream.
-- Enable Wake-on-LAN in the BIOS and on the NIC (`nmcli connection modify <con> 802-3-ethernet.wake-on-lan magic`).
+- **Watchdog** (`watchdog.py`, a systemd user service): if the client has been gone for `DISCONNECT_TIMEOUT` seconds (120 by default), it closes the Sunshine session and your monitors come back.
+- **Emergency shortcut `Meta+Shift+M`** (`restore-monitors.sh`): brings your monitors back immediately and ends the session, without locking. KDE loads the shortcut at your next login.
+- In Moonlight, enable **"Quit app after session"** (`quitappafter = true` in Moonlight TV) so leaving the stream closes the app right away.
+
+### Waking the PC from the couch
+
+Sunshine only runs inside a logged-in graphical session. The simplest reliable setup is to **suspend** the PC instead of shutting it down and use *Wake* in Moonlight (Wake-on-LAN): your session is still there.
+
+To wake it from a full shutdown you need auto-login (*System Settings → Login Screen*) and `LOCK_ON_LOGIN=1`. Downside: KDE Wallet is not unlocked at login, so you will be asked for its password separately. Enable Wake-on-LAN in the BIOS and on the NIC (`nmcli connection modify <con> 802-3-ethernet.wake-on-lan magic`).
 
 ## Security
 
 - With `UNLOCK_ON_STREAM=1` (the default), **any paired Moonlight client gets your unlocked desktop**. Pair only your own devices, and remove old ones from Sunshine's web UI (*PIN* / *Clients*).
 - With auto-login, anyone who powers the PC on gets your session for a few seconds, until `on-login.sh` locks it. Your KDE Wallet is not unlocked at login either, so apps that use it will ask for its password.
+- The `credentials` file holds your Sunshine web UI password in plain text (mode 600, readable only by you).
 - Set `UNLOCK_ON_STREAM=0` if you prefer to type your password on the TV.
 
 ## Configuration
@@ -97,8 +111,9 @@ Sunshine only runs inside a logged-in graphical session. To wake the PC from Moo
 | `VIRTUAL_SCALE` | `auto` | `auto` (200% at 4K, 150% at 1440p, 100% below) or a fixed value |
 | `PRIMARY` / `PRIMARY_MODE` | empty | Your main monitor and its mode, restored with an explicit mode and position |
 | `UNLOCK_ON_STREAM` | `1` | Unlock the session when a stream starts |
-| `LOCK_ON_STREAM_END` | `1` | Lock it when the stream ends |
-| `LOCK_ON_LOGIN` | `1` | Lock it right after login |
+| `LOCK_ON_STREAM_END` | `0` | Lock it when the stream ends |
+| `LOCK_ON_LOGIN` | `0` | Lock it right after login (for auto-login setups) |
+| `DISCONNECT_TIMEOUT` | `120` | Seconds without the client before the watchdog ends the session; `0` disables it |
 
 ## How it works
 
@@ -107,8 +122,10 @@ Sunshine only runs inside a logged-in graphical session. To wake the PC from Moo
 | `edid/gen_edid.py` | Generates an HDMI EDID (4K60 preferred, plus 1440p/1080p up to 120 Hz and 16:10 modes) that passes `edid-decode --check`. It includes the HDMI Forum VSDB (600 MHz), which amdgpu needs to accept 594 MHz over HDMI. |
 | `drm.edid_firmware=… video=HDMI-A-1:e` | Kernel parameters that load the EDID and force the connector on at boot. The initramfs must contain the EDID. |
 | `scripts/stream-start.sh` | Sunshine `do` command: saves which monitors are on, enables the virtual display, disables the monitors, unlocks. If the virtual display cannot be enabled, it leaves the monitors alone and exits with an error, so Sunshine aborts the stream. |
-| `scripts/stream-stop.sh` | Sunshine `undo` command: restores the saved monitors (or any connected one), disables the virtual display, locks. |
-| `scripts/on-login.sh` | Autostart: turns the virtual display off and every connected monitor on, then locks. |
+| `scripts/stream-stop.sh` | Sunshine `undo` command: restores the saved monitors (or any connected one), disables the virtual display, optionally locks. |
+| `scripts/on-login.sh` | Autostart: turns the virtual display off and every connected monitor on, optionally locks. |
+| `scripts/watchdog.py` | User service: ends the Sunshine session when the client has been gone for a while. |
+| `scripts/restore-monitors.sh` | `Meta+Shift+M`: brings the monitors back and ends the session, without locking. |
 
 ## Pitfalls we hit (and how the scripts handle them)
 
@@ -119,12 +136,15 @@ Sunshine only runs inside a logged-in graphical session. To wake the PC from Moo
 - **Sunshine runs the prep commands from a systemd user service, outside the session.** A bare `loginctl unlock-session` only works if `XDG_SESSION_ID` happens to be exported there, so the scripts look up the graphical session with `loginctl show-user <user> -p Display`.
 - **In our tests, KDE silently rejected enabling a monitor that overlaps another output.** The virtual display is moved away first, and the main monitor is enabled with an explicit mode and position.
 - **Forcing the connector from debugfs does not notify KWin.** `udevadm trigger --subsystem-match=drm --action=change` does.
+- **Locking the session while KDE is still switching outputs** left the lock screen undrawn on the monitor (only switching VTs, e.g. Ctrl+Alt+F1, brought it back). Locking at stream end is now off by default, and waits a few seconds when enabled.
+- **A frozen or abandoned stream keeps the monitors off**, because Sunshine only runs `undo` when the app is closed. The watchdog and the emergency shortcut handle this.
 - **A new monitor combination at boot** (e.g. a second monitor you rarely use) makes KDE enable every output, including the virtual one, so the login prompt can end up on a screen you cannot see. `on-login.sh` handles this.
 
 ## Moonlight tips
 
 - Status overlay in Moonlight TV (webOS): **long-press BACK** while streaming.
-- 4K60 needs more than the default 35 Mbps: try 50–80 Mbps (LG TV Ethernet ports are 100 Mbps), and enable AV1 if your TV decodes it.
+- **Do not enable AV1 in Moonlight TV (webOS).** On our LG OLED (2024) it froze the picture on the first frame while audio kept playing. HEVC works fine.
+- 4K60 with HEVC: 40 Mbps works well on our setup; go up to 50–80 Mbps if your network allows it (LG TV Ethernet ports are 100 Mbps).
 - Moonlight TV for LG webOS is not in the LG store. Install it with Developer Mode and the [Homebrew Channel](https://github.com/webosbrew/webos-homebrew-channel), or `ares-install` / [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop).
 
 ## License

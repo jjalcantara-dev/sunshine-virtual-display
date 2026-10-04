@@ -1,0 +1,12 @@
+[Unit]
+Description=Sunshine virtual display: end the session when the Moonlight client is gone
+After=app-dev.lizardbyte.app.Sunshine.service
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=@DEST@/watchdog.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

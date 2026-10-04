@@ -15,6 +15,9 @@ PRIMARY_MODE=2560x1440@144
 
 # Session locking. With UNLOCK_ON_STREAM=1, any paired Moonlight client gets an unlocked desktop.
 UNLOCK_ON_STREAM=1
-LOCK_ON_STREAM_END=1
-# Lock the session right after login (useful with auto-login)
-LOCK_ON_LOGIN=1
+LOCK_ON_STREAM_END=0
+# Lock the session right after login. Only useful with auto-login; 0 if you type your password to log in
+LOCK_ON_LOGIN=0
+# Close the Sunshine session (bringing the monitors back) when the client has been gone this many
+# seconds, e.g. the TV froze or was turned off. 0 disables it.
+DISCONNECT_TIMEOUT=120

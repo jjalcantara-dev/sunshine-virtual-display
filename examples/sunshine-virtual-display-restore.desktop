@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Restore monitors (Sunshine virtual display)
+Comment=Bring the real monitors back and end the Sunshine session
+Exec=@DEST@/restore-monitors.sh
+Icon=video-display
+NoDisplay=true
+X-KDE-Shortcuts=Meta+Shift+M

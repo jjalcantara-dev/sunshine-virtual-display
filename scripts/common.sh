@@ -12,8 +12,11 @@ MATCH_CLIENT="${MATCH_CLIENT:-1}"              # use the resolution/fps requeste
 PRIMARY="${PRIMARY:-}"                         # preferred real monitor, e.g. DP-2 (optional)
 PRIMARY_MODE="${PRIMARY_MODE:-}"               # its mode, e.g. 2560x1440@144 (optional)
 UNLOCK_ON_STREAM="${UNLOCK_ON_STREAM:-1}"      # unlock the session when a stream starts
-LOCK_ON_STREAM_END="${LOCK_ON_STREAM_END:-1}"  # lock it again when the stream ends
+LOCK_ON_STREAM_END="${LOCK_ON_STREAM_END:-0}"  # lock it again when the stream ends
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/sunshine-virtual-display/active-outputs"
+NO_LOCK_FLAG="${XDG_RUNTIME_DIR:-/tmp}/sunshine-virtual-display/no-lock"   # set by restore-monitors.sh
+CREDENTIALS="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine-virtual-display/credentials"  # SUNSHINE_USER/SUNSHINE_PASSWORD
+SUNSHINE_URL="${SUNSHINE_URL:-https://localhost:47990}"
 
 log() { echo "sunshine-virtual-display: $*" >&2; }
 
@@ -125,4 +128,15 @@ restore_real() {
     [ -n "$main" ] || main=${active%% *}
     kscreen-doctor "output.$main.priority.1"
     kscreen-doctor "output.$VIRTUAL.disable"
+}
+
+# Close the running Sunshine app through its web API, which makes Sunshine run the "undo" command.
+# Needs the web UI credentials in $CREDENTIALS (SUNSHINE_USER=... and SUNSHINE_PASSWORD=..., mode 600).
+sunshine_close_app() {
+    if [ ! -f "$CREDENTIALS" ]; then
+        log "no $CREDENTIALS; cannot close the Sunshine session"
+        return 1
+    fi
+    . "$CREDENTIALS"
+    curl -sk -m 10 -u "$SUNSHINE_USER:$SUNSHINE_PASSWORD" -X POST "$SUNSHINE_URL/api/apps/close" >/dev/null
 }
