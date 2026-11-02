@@ -1,6 +1,8 @@
 [Unit]
 Description=Sunshine virtual display: end the session when the Moonlight client is gone
-After=app-dev.lizardbyte.app.Sunshine.service
+# graphical-session.target is listed explicitly: otherwise the target is implicitly ordered after
+# this unit and, since Sunshine starts after the target, systemd finds an ordering cycle and drops it
+After=graphical-session.target app-dev.lizardbyte.app.Sunshine.service
 PartOf=graphical-session.target
 
 [Service]

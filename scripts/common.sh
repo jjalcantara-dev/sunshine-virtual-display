@@ -120,6 +120,21 @@ restore_real() {
     sleep 2
     active=$(enabled_real)
     if [ -z "$active" ]; then
+        # Some setups cannot drive a real monitor and the virtual display at the same time (KWin says
+        # "the driver rejected the output configuration"). Swap them in a single change instead: KWin
+        # applies a kscreen-doctor command as a whole or not at all, so if this is rejected too the
+        # virtual display simply stays on.
+        for o in $candidates; do
+            if [ "$o" = "$PRIMARY" ] && [ -n "$PRIMARY_MODE" ]; then
+                kscreen-doctor "output.$VIRTUAL.disable" "output.$o.enable" "output.$o.mode.$PRIMARY_MODE" "output.$o.position.0,0"
+            fi
+            is_enabled "$o" || kscreen-doctor "output.$VIRTUAL.disable" "output.$o.enable" "output.$o.position.0,0"
+            if is_enabled "$o"; then
+                log "swapped the virtual display for $o in one step"
+                kscreen-doctor "output.$o.priority.1"
+                return 0
+            fi
+        done
         log "no real monitor could be enabled; keeping the virtual display on"
         return 0
     fi
